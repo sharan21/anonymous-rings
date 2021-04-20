@@ -41,11 +41,6 @@ void service_socket(int client_fd, fd_set *all_fds, int server_soc_fd, int last_
 		parse_single_vote(recv_vote, receiver_buffer);
 		cout << "got vote from thread: " << recv_vote.curr_negotiator << " with destination: " << recv_vote.curr_client << endl;
 
-		// if (recv_message.s_thread == -1)
-			// return;
-
-	
-
 		for (int j = 0; j <= last_fd; j++)
 		{																	  //broadcast this to all other connected clients
 			if (FD_ISSET(j, all_fds) && j != server_soc_fd && j != client_fd){

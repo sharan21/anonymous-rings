@@ -245,8 +245,10 @@ void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode 
         ss >> recv_snode.snode_encryp_password;
         ss >> recv_snode.next_snode_password;
         ss >> recv_snode.next_snode_private_encryp_key;
+
+        
     
-        if (recv_snode.message_dest == my_snode.my_id && recv_snode.curr_round == my_snode.curr_round) //check if message is for me and it is not old message
+        if (recv_snode.message_dest == my_snode.my_id && (recv_snode.curr_round == my_snode.curr_round || recv_snode.message_type == 3)) //check if message is for me and it is not old message
         {
             //display received vote
             #pragma omp critical
@@ -271,6 +273,24 @@ void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode 
 
                 recv_snode.termination_detected = true;
                 // return;
+            }
+
+            // negotiator checks to see if it got a td check auth request from tail
+            if(recv_snode.message_type == 3){
+
+                #pragma omp critical
+                {   
+                    cout << "Snode ("<< my_snode.my_id << ", " << my_snode.snode_id << ", " << my_snode.snode_size << ", " << my_snode.curr_negotiator << ") got TD message from ";
+                    cout << "Snode ("<< recv_snode.my_id << ", " << recv_snode.snode_id << ", " << recv_snode.snode_size << ", " << recv_snode.curr_negotiator << ")" << endl;
+
+                    if(recv_snode.snode_password == my_snode.snode_password){
+                        cout << "TERMINATION DETECTED! Leader is: " << recv_snode.my_id << endl;
+                        exit(0);
+                    
+                    }
+                        
+                }
+               
             }
 
             if (recv_snode.message_type == 0 && recv_snode.curr_negotiator == my_snode.curr_client) // check to see if i got a mutual vote

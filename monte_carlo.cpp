@@ -481,16 +481,16 @@ int main()
 					if(recv_merged_snode.termination_detected){
 						// send my_snode to the node who sent you a vote with same snode id and size
 						my_snode.message_type = 3;
-						if(my_snode.snode_direction) my_snode.message_dest = right_channel; else my_snode.message_dest = left_channel;
+						if(my_snode.snode_direction == 1) my_snode.message_dest = right_channel; else my_snode.message_dest = left_channel;
 						//serialise and send the message
 						string to_send = create_vote_message(my_snode);
 						strcpy(sender_buffer, to_send.c_str());
-						// send(server_sock_fd, sender_buffer, strlen(sender_buffer), 0); 
+						send(server_sock_fd, sender_buffer, strlen(sender_buffer), 0); 
 
 						#pragma omp critical
 							{
-								cout << "Snode (" << id << ", " << merged_snode.snode_id << ", " << merged_snode.snode_size << ", " << merged_snode.curr_negotiator 
-									<< ") sent TD check to: " << recv_merged_snode.message_dest << endl;
+								cout << "Snode (" << id << ", " << my_snode.snode_id << ", " << my_snode.snode_size << ", " << my_snode.curr_negotiator 
+									<< ") sent TD check to: " << my_snode.message_dest << endl;
 							}
 
 						
