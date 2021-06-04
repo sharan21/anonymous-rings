@@ -254,9 +254,13 @@ int main()
 				}
 			}
 
+			
+
 			usleep(1000); //this is needed to ensure the message server has enough time to process and broadcast
 			
 			#pragma endregion
+
+			#pragma omp barrier
 
 			/***************** NEGOTIATOR CHECKS FOR MUTUAL VOTE FROM CURR CLIENT ************************/
 
@@ -284,6 +288,8 @@ int main()
 
 			#pragma endregion
 			
+			// not sure why this barrier is needed
+			#pragma omp barrier
 			/***************** NEGOTIATORS CONFIG NEW MERGED SNODE DATA ************************/
 
 			#pragma region
@@ -374,6 +380,9 @@ int main()
 			
 			#pragma endregion
 
+			// this barrier is needed to make sure all negotiators have seen there votes without moving to next phase
+			#pragma omp barrier
+
 			/*********** NEGOTIATOR DEAL NOT ACCEPTED, BROADCAST MERGE_FAILED MESSAGE TO MEMBERS ****************/
 
 			#pragma region
@@ -426,6 +435,7 @@ int main()
 
 			#pragma endregion
 
+			#pragma omp barrier
 			/***************** NEGOTIATORS UPDATE NEW MERGED SNODE DATA ************************/
 
 			#pragma region
@@ -437,12 +447,7 @@ int main()
 			}
 
 			#pragma endregion
-			
-			/********************** NON-NEGOTIATOR CHECKS FOR TERMINATION *********************************/
-			// #pragma region
-
-			// if()
-			// #pragma endregion
+		
 
 			/******* NON-NEGOTIATOR WAIT TILL THEY GET EITHER MERGE_SUCCESS OR MERGE_FAIL MESSAGE FROM NEG. ***********/
 
@@ -554,6 +559,8 @@ int main()
 
 			#pragma endregion
 			
+			//not sure why this barrier is needed
+			// #pragma omp barrier
 			/******************************* BARRIER FOR NEXT ROUND *********************************/
 			#pragma region
 

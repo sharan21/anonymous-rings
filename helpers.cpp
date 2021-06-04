@@ -212,6 +212,8 @@ void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode 
 
     stringstream ss(message_recv);
 
+    bool checked_once = false;
+    
     while (true)
     {
         if (ss.peek() == ss.eof())
@@ -224,12 +226,9 @@ void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode 
         if (ss >> recv_snode.n_threads) noop; else return;
 
         ss >> recv_snode.my_id;
-        // ss >> recv_snode.my_left_channel;
-        // ss >> recv_snode.my_right_channel;
         ss >> recv_snode.snode_id;
         ss >> recv_snode.snode_size;
         ss >> recv_snode.snode_direction;
-        // ss >> recv_snode.my_pos;
         ss >> recv_snode.curr_negotiator;
         ss >> recv_snode.curr_tail;
         ss >> recv_snode.curr_client;
@@ -247,32 +246,30 @@ void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode 
         ss >> recv_snode.next_snode_private_encryp_key;
 
         
-    
-        if (recv_snode.message_dest == my_snode.my_id && (recv_snode.curr_round == my_snode.curr_round || recv_snode.message_type == 3)) //check if message is for me and it is not old message
-        {
+        //check if message is for me and it is not old message
+        if (recv_snode.message_dest == my_snode.my_id && (recv_snode.curr_round == my_snode.curr_round || recv_snode.message_type == 3)) 
+        { 
             //display received vote
             #pragma omp critical
             {   
-                cout << "Snode (" << my_snode.my_id << ", " << my_snode.snode_id << ", " << my_snode.snode_size << ", " << my_snode.curr_negotiator << ") got vote from ";
+                cout << "Snode (" << my_snode.my_id << ", " << my_snode.snode_id << ", " << my_snode.snode_size << ", " << my_snode.curr_negotiator << ") got message from ";
                 cout << "Snode (" << recv_snode.my_id << ", "<< recv_snode.snode_id << ", " << recv_snode.snode_size << ", " << recv_snode.curr_negotiator << ")" << endl;
                 // cout << ". (global time: " << preprocess_timestamp(omp_get_wtime()) << ")." << endl;
             }
             
-            // (MONTE CARLO) tail got vote from some negotiator, check to see if it came from its own snode
+            // tail got vote from some negotiator, check to see if it came from its own snode
             if (recv_snode.message_type == 0 && my_snode.my_id == my_snode.curr_tail) 
             {
-                noop
                 if(recv_snode.snode_id == my_snode.snode_id && recv_snode.snode_size == my_snode.snode_size){
                      #pragma omp critical
                         {   
-                            cout << "*** Snode (" << my_snode.my_id << ", " << my_snode.snode_id << ", " << my_snode.snode_size << ", " << my_snode.curr_negotiator << ") detected TERMINATION" << endl;
-                            // cout << "Snode (" << recv_snode.my_id << ", "<< recv_snode.snode_id << ", " << recv_snode.snode_size << ", " << recv_snode.curr_negotiator << ") ***" << endl;
+                            cout << "Snode (" << my_snode.my_id << ", " << my_snode.snode_id << ", " << my_snode.snode_size << ", " << my_snode.curr_negotiator << ") suspects TERMINATION" << endl;
                             // cout << ". (global time: " << preprocess_timestamp(omp_get_wtime()) << ")." << endl;
                         }
+                recv_snode.termination_detected = true;
                 }
 
-                recv_snode.termination_detected = true;
-                // return;
+                // recv_snode.termination_detected = true;
             }
 
             // negotiator checks to see if it got a td check auth request from tail
@@ -288,16 +285,25 @@ void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode 
                         exit(0);
                     
                     }
-                        
                 }
-               
             }
 
-            if (recv_snode.message_type == 0 && recv_snode.curr_negotiator == my_snode.curr_client) // check to see if i got a mutual vote
+            // check to see if head got a mutual vote
+            if (recv_snode.message_type == 0 && recv_snode.curr_negotiator == my_snode.curr_client) 
             {
                 my_snode.deal_accepted = true;
+                // if a snode is of size one, it has to check both channels for mutual vote
                 return;
             }
+            else if(recv_snode.message_type == 0 && my_snode.curr_client != recv_snode.curr_negotiator){
+                if(my_snode.snode_size == 1 && !checked_once){
+                    cout << "Checked once" << endl;
+                    checked_once = true;
+                    continue;
+                }
+                    
+            }
+            // cout << "here" << endl;
 
             if(recv_snode.message_type == 1){
                 #pragma omp critical
@@ -307,7 +313,7 @@ void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode 
                     // cout << ". (global time: " << preprocess_timestamp(omp_get_wtime()) << ")." << endl;
                 }
                 my_snode.merge_status_received = true;
-                
+
                 return;
                 
             }

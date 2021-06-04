@@ -1,0 +1,12 @@
+1.) n threads vs no of rounds:
+    x-axis number of threads y-axis num of rounds.
+2.) n threads vs total number of messages sent:
+    x-axis number of threads y-axis line-1 average number of total messages to elect a leader, 
+    line-2 number of messages in each round.
+3.) n threads vs time:
+    x-axis number of threads y-axis line-1 average total time to elect a leader, 
+    line-2 average time taken in each round.
+
+
+TO DO:
+ write logic for if TD check is not true
