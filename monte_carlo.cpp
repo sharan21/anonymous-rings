@@ -79,6 +79,10 @@ int main()
 
 		fd_set all_fds, current_fds;
 
+		// experiment stats
+		long int tot_messages_sent = 0;
+		long int tot_messages_sent_pr = 0;
+
 		#pragma endregion
 
 		/********************************* SOCKET CREATION ******************************/
@@ -215,7 +219,8 @@ int main()
 			{
 
 				cout << "Node: " << id << endl;
-				display_snode(&my_snode);
+				display_snode(&my_snode, tot_messages_sent, tot_messages_sent_pr);
+				tot_messages_sent_pr = 0;
 				thread_counter++;
 			}
 
@@ -242,6 +247,8 @@ int main()
 				strcpy(sender_buffer, to_send.c_str());
 			
 				send(server_sock_fd, sender_buffer, strlen(sender_buffer), 0); // me -> server -> other clients
+				tot_messages_sent_pr++;
+				tot_messages_sent++;
 
 #pragma omp critical
 				{
@@ -360,6 +367,8 @@ int main()
 					strcpy(sender_buffer, to_send.c_str());
 	
 					send(server_sock_fd, sender_buffer, strlen(sender_buffer), 0); // me -> server -> other clients
+					tot_messages_sent_pr++;
+					tot_messages_sent++;
 
 	#pragma omp critical
 					{
@@ -414,6 +423,8 @@ int main()
 				strcpy(sender_buffer, to_send.c_str());
 
 				send(server_sock_fd, sender_buffer, strlen(sender_buffer), 0); // me -> server -> other clients
+				tot_messages_sent++;
+				tot_messages_sent_pr++;
 
 				#pragma omp critical
 				{
@@ -486,7 +497,8 @@ int main()
 						string to_send = create_vote_message(my_snode);
 						strcpy(sender_buffer, to_send.c_str());
 						send(server_sock_fd, sender_buffer, strlen(sender_buffer), 0); 
-
+						tot_messages_sent_pr++;
+						tot_messages_sent++;
 						#pragma omp critical
 							{
 								cout << "Snode (" << id << ", " << my_snode.snode_id << ", " << my_snode.snode_size << ", " << my_snode.curr_negotiator 
@@ -514,6 +526,8 @@ int main()
 							string to_send = create_vote_message(recv_merged_snode);
 							strcpy(sender_buffer, to_send.c_str());
 							send(server_sock_fd, sender_buffer, strlen(sender_buffer), 0); // me -> server -> other clients
+							tot_messages_sent_pr++;
+							tot_messages_sent++;
 							
 							#pragma omp critical
 							{
@@ -569,7 +583,7 @@ int main()
 
 #pragma omp barrier
 			if (my_snode.curr_round == k) exit(0);
-			usleep(10000);
+			// usleep(10000);
 
 			#pragma endregion
 		}

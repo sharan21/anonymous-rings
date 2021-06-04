@@ -117,16 +117,21 @@ struct my_supernode //this ds is used by all nodes to keep track of its own and 
         Dest: all members of the Snode
         Action: used to tell snode members that mutual vote wasnt received
 
-    3 -> MERGE_SUCCESS 
-        Sender: the negotiator of one Snode
-        Dest: all members of the Snode
-        Action: merge succeed, members should get and update details of merged snode
+    3 -> TD_CHECK 
+        Sender: the tail of an snode
+        Dest: the head of an snode (can be of same snode of sender)
+        Action: check to see if tail belongs to heads own snode by checking password
+
+    4 ->TD_SUCCESS
+        Sender: the head of the final snode
+        Dest: all members of the Snode (the ring)
+        Action: this is to tell the members that leader has been selected and stop algo
     */
 };
 
 
 
-void display_snode(my_supernode *my_snode){
+void display_snode(my_supernode *my_snode, long int tot_msg_sent, long int tot_msg_per_round){
     
     cout << "\t snode_id: " << my_snode->snode_id << endl;
     cout << "\t snode_size: " << my_snode->snode_size << endl;
@@ -139,7 +144,9 @@ void display_snode(my_supernode *my_snode){
     else
         cout << "\t curr client: " << my_snode->curr_client << endl;
     cout << "\t snode password: " << my_snode->snode_password << endl;
-    cout << "\t snode private key: " << my_snode->snode_private_encryp_key << endl << endl;
+    cout << "\t snode private key: " << my_snode->snode_private_encryp_key << endl;
+    cout << "\t #Messages sent last round: " << tot_msg_per_round << endl;
+    cout << "\t #Messages sent so far: " << tot_msg_sent << endl << endl;
         
 }
 
