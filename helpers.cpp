@@ -60,7 +60,7 @@ struct my_supernode //this ds is used by all nodes to keep track of its own and 
     // status flags used in parse_received_messages()
     bool deal_accepted = false; //used to see if snodes curr_neg got a mutual vote from its curr_client
     bool merge_status_received = false; 
-    bool termination_detected = false;
+    bool termination_suspected = false;
     
     // message metadata
     int message_type = 0; // check format in the below comment
@@ -169,7 +169,7 @@ string create_vote_message(my_supernode s)
         << ' ' << s.curr_round 
         << ' ' << s.deal_accepted 
         << ' ' << s.merge_status_received
-        << ' ' << s.termination_detected
+        << ' ' << s.termination_suspected
         << ' ' << s.message_type 
         << ' ' << s.message_dest 
         << ' ' << s.ttl
@@ -202,7 +202,7 @@ void parse_single_vote(my_supernode &recv_snode, char message_recv[], int base =
     ss >> recv_snode.curr_round;
     ss >> recv_snode.deal_accepted;
     ss >> recv_snode.merge_status_received;
-    ss >> recv_snode.termination_detected;
+    ss >> recv_snode.termination_suspected;
     ss >> recv_snode.message_type;
     ss >> recv_snode.message_dest;
     ss >> recv_snode.ttl;
@@ -213,7 +213,7 @@ void parse_single_vote(my_supernode &recv_snode, char message_recv[], int base =
     ss >> recv_snode.next_snode_private_encryp_key;
 }
 
-void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode &my_snode, my_supernode &recv_snode)
+void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode &my_snode, my_supernode &recv_snode, bool &leader_elected)
 {
     // the negotiators of all Snodes will parse their messages to check and see if they got a mutual vote using this function
 
@@ -243,7 +243,7 @@ void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode 
         ss >> recv_snode.curr_round;
         ss >> recv_snode.deal_accepted;
         ss >> recv_snode.merge_status_received;
-        ss >> recv_snode.termination_detected;
+        ss >> recv_snode.termination_suspected;
         ss >> recv_snode.message_type;
         ss >> recv_snode.message_dest;
         ss >> recv_snode.ttl;
@@ -260,7 +260,7 @@ void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode 
             //display received vote
             #pragma omp critical
             {   
-                cout << "Snode (" << my_snode.my_id << ", " << my_snode.snode_id << ", " << my_snode.snode_size << ", " << my_snode.curr_negotiator << ") got vote from ";
+                cout << "Snode (" << my_snode.my_id << ", " << my_snode.snode_id << ", " << my_snode.snode_size << ", " << my_snode.curr_negotiator << ") got MESSAGE from ";
                 cout << "Snode (" << recv_snode.my_id << ", "<< recv_snode.snode_id << ", " << recv_snode.snode_size << ", " << recv_snode.curr_negotiator << ")" << endl;
                 // cout << ". (global time: " << preprocess_timestamp(omp_get_wtime()) << ")." << endl;
             }
@@ -278,7 +278,7 @@ void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode 
                         }
                 }
 
-                recv_snode.termination_detected = true;
+                recv_snode.termination_suspected = true;
                 // return;
             }
 
@@ -287,20 +287,18 @@ void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode 
 
                 #pragma omp critical
                 {   
-                    cout << "Snode ("<< my_snode.my_id << ", " << my_snode.snode_id << ", " << my_snode.snode_size << ", " << my_snode.curr_negotiator << ") got TD message from ";
+                    cout << "Snode ("<< my_snode.my_id << ", " << my_snode.snode_id << ", " << my_snode.snode_size << ", " << my_snode.curr_negotiator << ") got TD CHECK message from ";
                     cout << "Snode ("<< recv_snode.my_id << ", " << recv_snode.snode_id << ", " << recv_snode.snode_size << ", " << recv_snode.curr_negotiator << ")" << endl;
 
                     if(recv_snode.snode_password == my_snode.snode_password){
-                        cout << "TERMINATION DETECTED! Leader is: " << recv_snode.my_id << endl;
-                        exit(0);
-                    
-                    }
-                        
+                        leader_elected = true;
+                    } 
                 }
-               
+                return;
             }
 
-            if (recv_snode.message_type == 0 && recv_snode.curr_negotiator == my_snode.curr_client) // check to see if i got a mutual vote
+            // check to see if i got a mutual vote
+            if (recv_snode.message_type == 0 && recv_snode.curr_negotiator == my_snode.curr_client) 
             {
                 my_snode.deal_accepted = true;
                 return;
@@ -333,6 +331,18 @@ void parse_received_votes(char message_recv[], int server_sock_fd, my_supernode 
                 
             }
 
+            if(recv_snode.message_type == 4){
+
+                #pragma omp critical
+                {   
+                    cout << "Snode ("<< my_snode.my_id << ", " << my_snode.snode_id << ", " << my_snode.snode_size << ", " << my_snode.curr_negotiator << ") got TD_SUCCESS from ";
+                    cout << "Snode ("<< recv_snode.my_id << ", " << recv_snode.snode_id << ", " << recv_snode.snode_size << ", " << recv_snode.curr_negotiator << ")" << endl;
+                    // cout << ". (global time: " << preprocess_timestamp(omp_get_wtime()) << ")." << endl;
+                }
+                leader_elected = true;
+                return;
+            }
+
         }
     }
 }
@@ -361,7 +371,7 @@ void reset_snode_flags(my_supernode &my_snode){
 
     my_snode.deal_accepted = false;
     my_snode.merge_status_received = false;
-    my_snode.termination_detected = false;
+    my_snode.termination_suspected = false;
 
     my_snode.message_type = -1;
     my_snode.message_dest = -1;

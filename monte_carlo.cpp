@@ -6,14 +6,16 @@ using namespace std;
 #define server_port 4950
 #define default_delay 1000
 
-void service_socket(char sender_buffer[], int server_sock_fd, my_supernode &s_node, my_supernode &recv_snode)
+bool service_socket(char sender_buffer[], int server_sock_fd, my_supernode &s_node, my_supernode &recv_snode)
 {
+	bool leader_elected = false;
 	char receiver_buffer[max_buf_size];
 	int message_size = recv(server_sock_fd, receiver_buffer, max_buf_size, 0);
 	receiver_buffer[message_size] = '\0';
 
-	// parse_received_messages(receiver_buffer, server_sock_fd, s_node);
-	parse_received_votes(receiver_buffer, server_sock_fd, s_node, recv_snode);
+	parse_received_votes(receiver_buffer, server_sock_fd, s_node, recv_snode, leader_elected);
+
+	return leader_elected;
 }
 
 int main()
@@ -70,6 +72,7 @@ int main()
 		int id = omp_get_thread_num();
 		int server_sock_fd, last_fd, i, dest_thread;
 		int curr_no_msg_sends = 0, curr_no_msg_rec = 0;
+		bool leader_elected = false; 
 
 		double curr_time, drift_sleep, clock_drift = 0, new_drift = 0;
 		char sender_buffer[max_buf_size];
@@ -169,7 +172,7 @@ int main()
 
 		#pragma endregion
 
-		while (true)
+		while (!leader_elected) 
 		{
 			bool skip = false; 
 			reset_snode_flags(my_snode); // reset all flags set during previous round 
@@ -286,11 +289,39 @@ int main()
 
 				// some socket has pushed data
 				if (FD_ISSET(server_sock_fd, &current_fds))
-					service_socket(sender_buffer, server_sock_fd, my_snode, recv_snode);
+					leader_elected = service_socket(sender_buffer, server_sock_fd, my_snode, recv_snode);
 			}
 
 			#pragma endregion
-			
+
+			/***************** NEGOTIATOR CHECKS FOR TERMINCATION DETECTION ************************/
+			#pragma region
+
+			if(leader_elected){
+				
+				cout << "TERMINATION DETECTED! Leader is: " << my_snode.my_id << endl;
+				
+				// the head (aka new leader) sends TD_SUCCESS message to its adj neighbour to be relayed to rest of the ring
+				//send the broadcast message
+				my_snode.message_type = 4;
+				string to_send = create_vote_message(my_snode);
+				strcpy(sender_buffer, to_send.c_str());
+
+				send(server_sock_fd, sender_buffer, strlen(sender_buffer), 0); // me -> server -> other clients
+				tot_messages_sent++;
+				tot_messages_sent_pr++;
+
+				#pragma omp critical
+				{
+					curr_time = preprocess_timestamp(omp_get_wtime());
+					cout << "Snode (" << id << ", " << my_snode.snode_id << ", " << my_snode.snode_size << ", " << my_snode.curr_negotiator << ") sent TD_SUCCESS to " << my_snode.message_dest << endl;	
+				}
+				// break from the outermost while(true) loop
+				continue;
+			}
+
+			#pragma endregion
+
 			/***************** NEGOTIATORS CONFIG NEW MERGED SNODE DATA ************************/
 
 			#pragma region
@@ -449,13 +480,8 @@ int main()
 
 			#pragma endregion
 			
-			/********************** NON-NEGOTIATOR CHECKS FOR TERMINATION *********************************/
-			// #pragma region
 
-			// if()
-			// #pragma endregion
-
-			/******* NON-NEGOTIATOR WAIT TILL THEY GET EITHER MERGE_SUCCESS OR MERGE_FAIL MESSAGE FROM NEG. ***********/
+			/******* NON-NEGOTIATOR WAIT TILL THEY GET EITHER MERGE_SUCCESS/MERGE_FAIL/TD_SUCCESS MESSAGE FROM NEG. ***********/
 
 			#pragma region
 
@@ -472,7 +498,7 @@ int main()
 				{	
 					#pragma omp critical
 					{
-						cout << "thread: " << id << " is waiting for MERGE_SUCCESS/MERGE_FAIL" << endl;
+						cout << "thread: " << id << " is waiting for MERGE_SUCCESS/MERGE_FAIL/TD_SUCCESS" << endl;
 					}
 					
 					if (select(last_fd + 1, &current_fds, NULL, NULL, &tv) < 0)
@@ -483,14 +509,39 @@ int main()
 
 					// some socket has pushed data
 					if (FD_ISSET(server_sock_fd, &current_fds)){
-						service_socket(sender_buffer, server_sock_fd, my_snode, recv_merged_snode);
+						leader_elected = service_socket(sender_buffer, server_sock_fd, my_snode, recv_merged_snode);
 						
 					}
 
-					// CHECK FOR TERMICNTION DETECTION
+					// CHECK FOR TERMICNTION DETECTION, relay to next and break to outer loop if true
+					if(leader_elected){
+						
+						if(true){
+	
+							if(my_snode.snode_direction) recv_merged_snode.message_dest = left_channel; else recv_merged_snode.message_dest = right_channel;
 
-					if(recv_merged_snode.termination_detected){
-						// send my_snode to the node who sent you a vote with same snode id and size
+							//serialise and send the message
+							string to_send = create_vote_message(recv_merged_snode);
+							strcpy(sender_buffer, to_send.c_str());
+							send(server_sock_fd, sender_buffer, strlen(sender_buffer), 0); // me -> server -> other clients
+							tot_messages_sent_pr++;
+							tot_messages_sent++;
+							
+							#pragma omp critical
+							{
+								cout << "Snode (" << id << ", " << merged_snode.snode_id << ", " << merged_snode.snode_size << ", " << merged_snode.curr_negotiator 
+									<< ") relayed TD_SUCCESS message to thread: " << recv_merged_snode.message_dest << endl;
+							}	
+						}
+						cout << "thread: " << id << " is here " <<endl;
+						break;
+					}
+					
+						
+					// CHECK FOR TERMICNTION SUSPECTED BY ME (TAIL) and send TD_Check to head who sent vote
+
+					if(recv_merged_snode.termination_suspected){
+						// send TD_check message to the node who sent you a vote with same snode id and size
 						my_snode.message_type = 3;
 						if(my_snode.snode_direction == 1) my_snode.message_dest = right_channel; else my_snode.message_dest = left_channel;
 						//serialise and send the message
@@ -505,8 +556,7 @@ int main()
 									<< ") sent TD check to: " << my_snode.message_dest << endl;
 							}
 
-						
-						
+			
 					}
 								
 					// CHECK IF MERGE STATUS RECEIVED AND RELAY TO NEIGHBOR IF NEEDED
@@ -558,12 +608,15 @@ int main()
 							my_snode.snode_direction = recv_merged_snode.snode_direction;
 
 						}
-						break;
-
+						// message received, break from this while true loop
+						break; 
 					}
+
 					usleep(10000);
 				}
-
+				// break from outermost while loop
+				if(leader_elected) 
+					break;
 			}
 
 			#pragma endregion
@@ -589,10 +642,21 @@ int main()
 		}
 			
 		/************************** DONE, WAIT FOR OTHER THREADS AND PRINT STATS *******************************/
+		#pragma region
 
-		//barrier to wait till statistics are printed
-		// while (temp != n);
-		
+		// wait for the others to receive TD SUCCESS and break to end`		
+		#pragma omp barrier
+		// print stats
+		#pragma omp critical
+		{
+			cout << "Node: " << id << endl;
+			cout << tot_messages_sent << endl;
+		}
+
+		#pragma endregion
+
+
+	
 	} //END OF CONCURRENT REGION
 
 	return 0;
